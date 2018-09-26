@@ -2,5 +2,23 @@
 <meta>
 	<title>/home/adrian</title>
 	<author>Adrian Kummerländer</author>
+	<description>Adrian Kummerländer's blog on software development, linux and open source</description>
 	<url>http://localhost:8080</url>
+
+	<header>
+		<navigation>
+			<link href="/">Start</link>
+			<link href="/archive">Archive</link>
+			<link href="https://tree.kummerlaender.eu/contact">Contact</link>
+			<link href="/atom.xml">Feed</link>
+		</navigation>
+	</header>
+
+	<footer>
+		<info href="https://tree.kummerlaender.eu/projects/xslt">Made with XSLT</info>
+		<navigation>
+			<link href="https://tree.kummerlaender.eu/contact">Contact</link>
+			<link href="/atom.xml">Feed</link>
+		</navigation>
+	</footer>
 </meta>
