@@ -9,7 +9,6 @@
 		<navigation>
 			<link href="/">Start</link>
 			<link href="/archive">Archive</link>
-			<link href="https://tree.kummerlaender.eu/projects">Projects</link>
 			<link href="https://tree.kummerlaender.eu/contact">Contact</link>
 			<link href="/atom.xml">Feed</link>
 		</navigation>
@@ -22,4 +21,10 @@
 			<link href="/atom.xml">Feed</link>
 		</navigation>
 	</footer>
+
+	<archive>
+		<navigation>
+			<link href="https://code.kummerlaender.eu/web/blog_content/src/branch/master/articles">Source</link>
+		</navigation>
+	</archive>
 </meta>

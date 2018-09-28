@@ -10,8 +10,8 @@ in pkgs.stdenv.mkDerivation {
   src = pkgs.fetchFromGitHub {
     owner = "KnairdA";
     repo  = "blog.kummerlaender.eu";
-    rev    = "3ea8a40d20a244ca2084a7654f0c3a41de98ea87";
-    sha256 = "1746997rdjv7s8swi22b0aff70vdwmzbnz7h268nb9b6mdwxras0";
+    rev    = "c072eaa95c783b9c5d26535cc22694c7a62eb6cb";
+    sha256 = "0iqjwixzd6aks9ir2ij33d8qmd3s0h28frh7r7xw7ylbrli86xag";
   };
 
   LANG = "en_US.UTF-8";
@@ -24,6 +24,7 @@ in pkgs.stdenv.mkDerivation {
   ];
 
   installPhase = ''
+    mkdir source/00_content
     cp -r ${./articles} source/00_content/articles
     cp -r ${./tags}     source/00_content/tags
     cp    ${./meta.xml} source/00_content/meta.xml
