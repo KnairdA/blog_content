@@ -8,15 +8,15 @@ Die direkte Repräsentation eines Unicode Code-Points ohne Aufteilung auf mehrer
 
 Getreu der auf [UTF-8 Everywhere](http://www.utf8everywhere.org/) hervorgebrachten Argumentation werden wir uns im Folgenden mit UTF-8 beschäftigen und die beiden alternativen Enkodierungsarten ignorieren.
 
-Grundsätzlich stellt es auf der Plattform meiner Wahl - Linux mit Lokalen auf _en\_US.UTF-8_ - kein Problem dar, UTF-8 enkodierte Strings in C++ Programmen zu verarbeiten.
-Den Klassen der C++ Standard Library ist es, solange wir nur über das reine Speichern und Bewegen von Strings sprechen, egal ob dieser in UTF-8, ASCII oder einem ganz anderen Zeichensatz kodiert ist. Möchten wir sicher gehen, dass ein in einer Instanz von _std::string_ enthaltener Text tatsächlich in UTF-8 enkodiert wird und dies nicht vom Zeichensatz der Quelldatei abhängig ist, reicht es dies durch voranstellen von _u8_ zu definieren:
+Grundsätzlich stellt es auf der Plattform meiner Wahl - Linux mit Lokalen auf `en_US.UTF-8` - kein Problem dar, UTF-8 enkodierte Strings in C++ Programmen zu verarbeiten.
+Den Klassen der C++ Standard Library ist es, solange wir nur über das reine Speichern und Bewegen von Strings sprechen, egal ob dieser in UTF-8, ASCII oder einem ganz anderen Zeichensatz kodiert ist. Möchten wir sicher gehen, dass ein in einer Instanz von `std::string` enthaltener Text tatsächlich in UTF-8 enkodiert wird und dies nicht vom Zeichensatz der Quelldatei abhängig ist, reicht es dies durch voranstellen von `u8` zu definieren:
 
 ```cpp
 std::string test(u8"Hellø Uni¢ød€!");
 ```
 
-Der C++ Standard garantiert uns, dass ein solcher String in UTF-8 enkodiert wird. Auch die Ausgabe von in dieser Form enkodierten Strings funktioniert nach meiner Erfahrung - z.T. erst nach setzen der Lokale mittels _std::setlocale_ - einwandfrei. Probleme gibt es dann, wenn wir den Text als solchen näher untersuchen oder sogar verändern wollen bzw. die Ein- und Ausgabe des Textes in anderen Formaten erfolgen soll. Für letzteres gibt es eigentlich die _std::codecvt_ Facetten, welche aber in der aktuellen Version der GNU libstdc++ noch [nicht implementiert](http://gcc.gnu.org/onlinedocs/libstdc++/manual/status.html#status.iso.2011) sind. 
-Wir müssen in diesem Fall also auf externe Bibliotheken wie beispielweise [iconv](https://www.gnu.org/software/libiconv/) oder [ICU](http://site.icu-project.org/) zurückgreifen. Auch die in der C++ Standard Library enthaltenen Templates zur String-Verarbeitung helfen uns bei Multibyte-Enkodierungen, zu denen auch UTF-8 zählt, nicht viel, da diese mit dem _char_ Datentyp und nicht mit Code-Points arbeiten. So liefert _std::string_ beispielsweise für einen UTF-8 enkodierten String, welcher nicht nur von dem in einer Code-Unit abbildbaren ASCII-Subset Gebrauch macht, nicht die korrekte Zeichenanzahl. Auch eine String-Iteration ist mit den Standard-Klassen nur Byte- und nicht Code-Point-Weise umsetzbar. Wir stehen also vor der Entscheidung eine weitere externe Bibliothek zu verwenden oder Programm-Intern vollständig auf UTF-32 zu setzen.
+Der C++ Standard garantiert uns, dass ein solcher String in UTF-8 enkodiert wird. Auch die Ausgabe von in dieser Form enkodierten Strings funktioniert nach meiner Erfahrung - z.T. erst nach setzen der Lokale mittels `std::setlocale` - einwandfrei. Probleme gibt es dann, wenn wir den Text als solchen näher untersuchen oder sogar verändern wollen bzw. die Ein- und Ausgabe des Textes in anderen Formaten erfolgen soll. Für letzteres gibt es eigentlich die `std::codecvt` Facetten, welche aber in der aktuellen Version der GNU libstdc++ noch [nicht implementiert](http://gcc.gnu.org/onlinedocs/libstdc++/manual/status.html#status.iso.2011) sind. 
+Wir müssen in diesem Fall also auf externe Bibliotheken wie beispielweise [iconv](https://www.gnu.org/software/libiconv/) oder [ICU](http://site.icu-project.org/) zurückgreifen. Auch die in der C++ Standard Library enthaltenen Templates zur String-Verarbeitung helfen uns bei Multibyte-Enkodierungen, zu denen auch UTF-8 zählt, nicht viel, da diese mit dem `char` Datentyp und nicht mit Code-Points arbeiten. So liefert `std::string` beispielsweise für einen UTF-8 enkodierten String, welcher nicht nur von dem in einer Code-Unit abbildbaren ASCII-Subset Gebrauch macht, nicht die korrekte Zeichenanzahl. Auch eine String-Iteration ist mit den Standard-Klassen nur Byte- und nicht Code-Point-Weise umsetzbar. Wir stehen also vor der Entscheidung eine weitere externe Bibliothek zu verwenden oder Programm-Intern vollständig auf UTF-32 zu setzen.
 
 ## Ein UTF-8 Codepoint-Iterator in C++
 
@@ -36,7 +36,7 @@ In obenstehender Tabelle ist die in [RFC3629](http://tools.ietf.org/html/rfc3629
 Anhand der Tabelle können wir erkennen, dass die Rückwärtskompatibilität zu ASCII dadurch gewährleistet wird, dass alle Code-Points bis 
 einschließlich 127 im ersten Byte dargestellt werden können. Sobald in der ersten Code-Unit das Bit mit dem höchsten Stellenwert gesetzt ist, handelt es sich um einen Code-Point mit mehr als einer Code-Unit. Die genaue Anzahl der Code-Units lässt sich an der Anzahl der führenden 1er-Bits erkennen. Zwischen Payload und Header steht dabei immer ein 0er-Bit, Fortsetzungs-Bytes beginnen in UTF-8 immer mit dem Präfix <tt>10</tt>.
 
-Zur Erkennung und Umformung der UTF-8 Code-Units verwenden wir in der _UTF8::CodepointIterator_-Klasse die folgenden, in stark typisierten Enums definierten, Bitmasken:
+Zur Erkennung und Umformung der UTF-8 Code-Units verwenden wir in der `UTF8::CodepointIterator`-Klasse die folgenden, in stark typisierten Enums definierten, Bitmasken:
 
 ```cpp
 enum class CodeUnitType : uint8_t {
@@ -67,7 +67,7 @@ for ( UTF8::CodepointIterator iter(test.cbegin());
 }
 ```
 
-Die Dereferenzierung einer Instanz des Iterators produziert den aktuellen Code-Point als _char32\_t_, da dieser Datentyp garantiert vier Byte lang ist. Die Ausgabe eines solchen UTF-32 enkodierten Code-Points ist mir allerdings leider nur nach dem Cast in _wchar\_t_ gelungen. Dieser wird trotzdem nicht als Dereferenzierungs-Typ verwendet, da die Länge nicht fest definiert ist, sondern abhängig von der jeweiligen C++ Implementierung unterschiedlich sein kann. Dies stellt jedoch kein größeres Problem dar, da der Iterator für die interne Betrachtung von Strings und nicht zur Konvertierung für die Ausgabe gedacht ist.
+Die Dereferenzierung einer Instanz des Iterators produziert den aktuellen Code-Point als `char32_t`, da dieser Datentyp garantiert vier Byte lang ist. Die Ausgabe eines solchen UTF-32 enkodierten Code-Points ist mir allerdings leider nur nach dem Cast in `wchar_t` gelungen. Dieser wird trotzdem nicht als Dereferenzierungs-Typ verwendet, da die Länge nicht fest definiert ist, sondern abhängig von der jeweiligen C++ Implementierung unterschiedlich sein kann. Dies stellt jedoch kein größeres Problem dar, da der Iterator für die interne Betrachtung von Strings und nicht zur Konvertierung für die Ausgabe gedacht ist.
 
 ## Fazit
 
