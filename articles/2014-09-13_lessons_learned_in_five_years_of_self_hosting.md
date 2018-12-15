@@ -1,6 +1,6 @@
 # Lessons learned in five years of self-hosting
 
-Nearly five years ago I started self-hosting this website on a [SheevaPlug]. Two days ago I reassigned the DNS records to point to a virtual server that now hosts the newly developed [statically generated] version of this website you are currently viewing. I want to use this article to document some of the lessons I learned during this time.
+Nearly five years ago I started self-hosting this website on a SheevaPlug. Two days ago I reassigned the DNS records to point to a virtual server that now hosts the newly developed [statically generated] version of this website you are currently viewing. I want to use this article to document some of the lessons I learned during this time.
 
 One thing that became clear during those five years is that the [Marvell SheevaPlug] really is a great and durable platform for hosting web applications from a home connection. It combines more than enough processing power with a energy efficient, compact and fan-less design which is all that is needed to host a full web stack consisting of a preferred database, language and web server. For my use case this meant _MariaDB_ in combination with _PHP_ and _Lighttpd_ as a foundation for a _Symphony CMS_ instance. And even this didn't bring the SheevaPlug to its limits as it was no problem to host additional applications such as _Dovecot_ and _OpenVPN_ on the same device. The only reason why I moved this website to a virtual server is that the unacceptably slow _DSL_ connection available in my home village could not keep up with growing visitor counts and growing expectations on availabilty on my part. If it weren't for this issue and the absence of hope that this situation will get better in the near future I would still host this website from home - both the hardware and software configuration would be more than up to the task.
 
@@ -26,7 +26,6 @@ As a conclusion I want to say that self-hosting is not only feasible but works m
 
 If you should have further questions on my experience with self-hosting feel free to comment or to [contact] me personally.
 
-[SheevaPlug]: /tag/sheevaplug/
 [Marvell SheevaPlug]: https://www.globalscaletechnologies.com/t-sheevaplugdetails.aspx
 [statically generated]: https://tree.kummerlaender.eu/projects/xslt/blog/
 [Tarsnap]: http://tarsnap.com
