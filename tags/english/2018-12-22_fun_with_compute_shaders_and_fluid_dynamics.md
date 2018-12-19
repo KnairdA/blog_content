@@ -1,0 +1,1 @@
+../../articles/2018-12-22_fun_with_compute_shaders_and_fluid_dynamics.md
