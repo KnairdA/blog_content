@@ -1,16 +1,11 @@
 # Fun with compute shaders and fluid dynamics
 
+<video controls="" preload="metadata" loop="true" poster="https://static.kummerlaender.eu/media/classical_explosion.poster.jpg"><source src="https://static.kummerlaender.eu/media/classical_explosion.teaser.mp4" type="video/mp4"/></video>
+
 ## First for some theory…
 
-What we want (Navier-Stokes):
-
-$$\begin{aligned} \partial_t  \rho + \nabla \cdot (\rho u) &= 0 \\ \partial_t u + (u \cdot \nabla) u &= -\frac{1}{\rho} \nabla p + 2\nu\nabla \cdot (\mathrm{S})\end{aligned}$$
-
-Pressure $p = c_s^2 \rho$
-
-Kinetic viscosity: $\nu = c_s^2 \tau$
-
-Tensor: $\mathrm{S} = \frac{1}{2} (\nabla u + (\nabla u)^\top)$
+The behaviour of weakly compressible fluid flows -- i.e. non-supersonic flows where the compressibility of the flowing fluid plays a small but _non-central_ role -- is usually modelled by the weakly compressible Navier-Stokes equations which relate density $\rho$, pressure $p$, viscosity $\nu$ and speed $u$ to each other:
+$$\begin{aligned} \partial_t  \rho + \nabla \cdot (\rho u) &= 0 \\ \partial_t u + (u \cdot \nabla) u &= -\frac{1}{\rho} \nabla p + 2\nu\nabla \cdot \left(\frac{1}{2} (\nabla u + (\nabla u)^\top)\right)\end{aligned}$$
 
 What we use (Boltzmann equilibrium):
 
@@ -126,10 +121,8 @@ void main() {
 
 ## Visuals
 
-![Pleasing snapshot of an artfully amplified implosion](https://static.kummerlaender.eu/media/boltzstern_1.jpg)
-
-![Pleasing snapshot of an artfully amplified implosion](https://static.kummerlaender.eu/media/boltzstern_2.jpg)
-
-![Pleasing snapshot of an artfully amplified implosion](https://static.kummerlaender.eu/media/boltzstern_3.jpg)
+<video controls="" preload="metadata" loop="true" poster="https://static.kummerlaender.eu/media/boltzstern_1.jpg"><source src="https://static.kummerlaender.eu/media/boltzstern.mp4" type="video/mp4"/></video>
 
 ## Reaching down from the heavens
+
+<video controls="" preload="metadata" loop="true" poster="https://static.kummerlaender.eu/media/interactive_boltzmann_256.poster.jpg"><source src="https://static.kummerlaender.eu/media/interactive_boltzmann_256.mp4" type="video/mp4"/></video>
