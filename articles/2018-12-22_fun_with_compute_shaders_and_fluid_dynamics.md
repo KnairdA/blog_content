@@ -320,7 +320,7 @@ void main() {
 
 [<tt>geometry.glsl</tt>](https://code.kummerlaender.eu/compustream/tree/src/shader/code/geometry.glsl) projects these fluid cells that where up until now positioned in lattice space into the screen's coordinate system via the `MVP` matrix. Such geometry shaders are very flexible as we can easily adapt a fixed point vertex based shader interface into different visualization geometries.
 
-![Artfully amplified implosion inside a closed space](http://static.kummerlaender.eu/media/boltzstern_2.jpg)
+![Artfully amplified implosion inside a closed space](https://static.kummerlaender.eu/media/boltzstern_2.jpg)
 
 This more abstract [visualization](https://static.kummerlaender.eu/media/boltzstern.mp4) embedded in its moving glory at the start of this article was generated in the same way by simply spatially shifting the fluid cells by their heavily amplified velocities instead of only coloring them.
 
