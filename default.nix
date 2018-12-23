@@ -10,8 +10,8 @@ in pkgs.stdenv.mkDerivation {
   src = pkgs.fetchFromGitHub {
     owner = "KnairdA";
     repo  = "blog.kummerlaender.eu";
-    rev    = "76f867690e5ba76ae769b5f5c97297f32102b738";
-    sha256 = "1i5lpsw89gaalb55rf99rv2a5dfqs2d7hr8sdy4sa4h04ah81ji9";
+    rev    = "61d983373016fe2eba27335a247b25c229317944";
+    sha256 = "125hfwaq3pcy3psbgr0ycb8gb1jnknqnaqadmv7ng9wrf0sny1yq";
   };
 
   LANG = "en_US.UTF-8";
