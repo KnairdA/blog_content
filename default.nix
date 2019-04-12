@@ -1,10 +1,6 @@
-{ system ? builtins.currentSystem }:
+{ pkgs ? import <nixpkgs> { }, mypkgs ? import <mypkgs> { }, ... }:
 
-let
-  pkgs    = import <nixpkgs> { inherit system; };
-  mypkgs  = import (fetchTarball "https://pkgs.kummerlaender.eu/nixexprs.tar.gz") { };
-
-in pkgs.stdenv.mkDerivation {
+pkgs.stdenv.mkDerivation {
   name = "blog.kummerlaender.eu";
 
   src = pkgs.fetchFromGitHub {
