@@ -1,6 +1,6 @@
 # Expressive meta templates for flexible handling of compile-time constants
 
-So [we](http://www.lbrg.kit.edu/) recently released a new version of [OpenLB](https://www.openlb.net/news/openlb-release-1-3-available/) which includes a major refactoring of the central datastructure used to handle various kinds of compile-time constants used by the simulation. This article will summarize the motivation and design of this new concept as well as highlight a couple of tricks and pitfalls in the context of template metaprogramming.
+So [we](http://www.lbrg.kit.edu/) recently released a new version of [OpenLB](http://www.openlb.net) which includes a major refactoring of the central datastructure used to handle various kinds of compile-time constants required by the simulation. This article will summarize the motivation and design of this new concept as well as highlight a couple of tricks and pitfalls in the context of template metaprogramming.
 
 ## What is a descriptor?
 
@@ -49,7 +49,7 @@ struct D2Q9DescriptorBase {
 };
 ```
 
-As we can see this is plain struct template with some static member constants to store the data. This in itself is not problematic and worked just fine since the project's inception. Note that the template allows for specification of the floating point type used for all non-integer data. This is required to e.g. use automatic differentiation types that allow for taking the derivative of the whole simulation in order to apply optimization techniques.
+As we can see this is a plain struct template with some static member constants to store the data. This in itself is not problematic and worked just fine since the project's inception. Note that the template allows for specification of the floating point type used for all non-integer data. This is required to e.g. use automatic differentiation types that allow for taking the derivative of the whole simulation in order to apply optimization techniques.
 
 ```cpp
 template<typename T>
@@ -78,7 +78,7 @@ template<typename T>
 const T D2Q9DescriptorBase<T>::invCs2 = (T)3;
 ```
 
-The actual data was stored in a separate header `src/dynamics/latticeDescriptors.hh`. All in all this very straight forward approach worked as expected and could be fully resolved at compile time to avoid unnecessary run time jumps inside critical code sections as far as the descriptor concept is concerned. The real issue starts when we take a look at _external fields_:
+The actual data was stored in a separate header `src/dynamics/latticeDescriptors.hh`. All in all this very straight forward approach worked as expected and could be fully resolved at compile time to avoid unnecessary run time jumps inside critical code sections as far as the descriptor concept is concerned. The real issue starts when we take a look at the so called _external fields_:
 
 ```cpp
 struct Force2dDescriptor {
@@ -107,7 +107,7 @@ sLattice.defineExternalField( superGeometry, 1,
                               force );
 ```
 
-For example this is basically a completely unsafe access to raw memory as `forceBeginsAt` and `sizeOfForce` define arbitrary memory offsets. And while we might not care about security in this context you can probably imagine the kinds of obscure bugs caused by potentially faulty and inconsistent handling of such offsets. To make things worse the naming of external field indices and size constants was inconsistent between different fields and stuff only worked as long as a unclear set of naming and definition conventions was followed.
+For example this is a completely unsafe access to raw memory as `forceBeginsAt` and `sizeOfForce` define arbitrary memory offsets. And while we might not care about security in this context you can probably imagine the kinds of obscure bugs caused by potentially faulty and inconsistent handling of such offsets. To make things worse the naming of external field indices and size constants was inconsistent between different fields and stuff only worked as long as a unclear set of naming and layout conventions was followed.
 
 If you want to risk an even closer look[^4] you can download [version 1.2 or earlier](https://www.openlb.net/download/) and start your dive in `src/dynamics/latticeDescriptors.h`. Otherwise we are going to continue with a description of the new approach.
 
@@ -115,7 +115,7 @@ If you want to risk an even closer look[^4] you can download [version 1.2 or ear
 
 ## What is a meta descriptor?
 
-The initial spark for the development of the new meta descriptor concept was the idea to define external fields as the parametrization of a multilinear function on the foundational `D` and `Q` constants of each descriptor[^5]. Lists of such functions could then be passed around via variadic template argument lists. This would then allow for handling of external fields that is both flexible and consistent across all descriptors.
+The initial spark for the development of the new meta descriptor concept was the idea to define external fields as the parametrization of a multilinear function on the foundational `D` and `Q` constants of each descriptor[^5]. Lists of such functions could then be passed around via variadic template argument lists. This would then allow for handling external fields in a manner that is both flexible and consistent across all descriptors.
 
 [^5]: i.e. each field describes its size as a function $f : \mathbb{N}_0^3 \to \mathbb{N}_0, (a,b,c) \mapsto a + b D + c Q$
 
@@ -157,7 +157,9 @@ constexpr Fraction cs2<2,9> = {1, 3};
 }
 ```
 
-These few compact lines describe the whole structure including all of its data. The various functions to access this data are auto-generated in a generic fashion using template metaprogramming and the previously verbose definition of a forced LB model reduces to a single self-explanatory line:
+These few compact lines[^51] describe the whole structure including all of its data. The various functions to access this data are auto-generated in a generic fashion using template metaprogramming and the previously verbose definition of a forced LB model reduces to a single self-explanatory type alias:
+
+[^51]: See `src/dynamics/latticeDescriptors.h`
 
 ```cpp
 using ForcedD2Q9Descriptor = D2Q9<FORCE>;
@@ -186,11 +188,11 @@ static T equilibrium(int iPop, T rho, const T u[DESCRIPTOR::d], const T uSqr)
 }
 ```
 
-The inclusion of the `descriptors` namespace slightly increases the verbosity of functions such as the one above. As a workaround we can use local namespace inclusion if things get too bad. But even if this was not possible the transparent extensibility (i.e. the ability to customize the underlying implementation without changing all call sites) more than makes up for increasing the character count of some sections.
+The inclusion of the `descriptors` namespace slightly increases the verbosity of functions such as the one above. If things get to bad we can use local namespace inclusion as a workaround. But even if this was not possible the transparent extensibility (i.e. the ability to customize the underlying implementation without changing all call sites) more than makes up for increasing the character count of some sections.
 
 ## Implementation
 
-Back in 2013 I experimented with [_mapping binary structures as tuples using template metaprogramming_](/article/mapping_binary_structures_as_tuples_using_template_metaprogramming/) in order to develop the foundations for a graph database. Surprisingly there where quite a few parallels between what I was doing then to what I am describing in this article. While I neither used the resulting [BinaryMapping](https://github.com/KnairdA/BinaryMapping) library for the development of [GraphStorage](https://github.com/KnairdA/GraphStorage) nor ever used this then LevelDB-based graph _database_ for more than basic examples, it was a welcome surprise to think back to my first steps doing more template-centered C++ programming.
+Back in 2013 I experimented with [_mapping binary structures as tuples using template metaprogramming_](/article/mapping_binary_structures_as_tuples_using_template_metaprogramming/) in order to develop the foundations for a graph database. Surprisingly there were quite a few parallels between what I was doing then to what I am describing in this article. While I neither used the resulting [BinaryMapping](https://github.com/KnairdA/BinaryMapping) library for the development of [GraphStorage](https://github.com/KnairdA/GraphStorage) nor ever used this then LevelDB-based graph _database_ for more than a couple of basic examples, it was a welcome surprise to think back to my first steps doing more template-centered C++ programming.
 
 ```cpp
 /// Base descriptor of a D-dimensional lattice with Q directions and a list of additional fields
@@ -208,7 +210,9 @@ struct DESCRIPTOR_BASE {
 };
 ```
 
-As the description of any LBM model includes at least a number of spatial dimensions `D` and a number of discrete velocities `Q` these two constants are the required template arguments of the new `DESCRIPTOR_BASE` class template. Until we finally get concepts in C++, the members of the `FIELDS` list are by convention expected to offer a `size` and `getLocalIndex` template methods accepting these two foundational constants.
+As the description of any LBM model includes at least a number of spatial dimensions `D` and a number of discrete velocities `Q` these two constants are the required template arguments of the new `DESCRIPTOR_BASE` class template[^61]. Until we finally get concepts in C++, the members of the `FIELDS` list are by convention expected to offer a `size` and `getLocalIndex` template methods accepting these two foundational constants.
+
+[^61]: See `src/dynamics/descriptorBase.h`
 
 ```cpp
 /// Base of a descriptor field whose size is defined by A*D + B*Q + C
@@ -233,7 +237,7 @@ struct DESCRIPTOR_FIELD_BASE {
 };
 ```
 
-Most[^6] fields use the `DESCRIPTOR_FIELD_BASE` template as a base class. This template parametrizes the previously mentioned multilinear size function and allows for sharing field definitions between all descriptors.
+Most[^62] fields use the `DESCRIPTOR_FIELD_BASE` template as a base class. This template parametrizes the previously mentioned multilinear size function and allows for sharing field definitions between all descriptors.
 
 ```cpp
 // Field types need to be distinct (i.e. not aliases) in order for `DESCRIPTOR_BASE::index` to work
@@ -244,9 +248,10 @@ struct SOURCE               : public DESCRIPTOR_FIELD_BASE<1,  0, 0> { };
 /* [...] */
 ```
 
-Let us take the `FORCE` field as an example: This field represents a cell-local force vector and as such requires exactly `D` floating point values worth of storage. Correspondingly its base class is `DESCRIPTOR_FIELD_BASE<0,1,0>` which yields a size of `2` for two-dimensional and `3` for three-dimensional descriptors.
+Let us take the `FORCE` field as an example[^63]: This field represents a cell-local force vector and as such requires exactly `D` floating point values worth of storage. Correspondingly its base class is `DESCRIPTOR_FIELD_BASE<0,1,0>` which yields a size of `2` for two-dimensional and `3` for three-dimensional descriptors.
 
-[^6]: e.g. there is also a `TENSOR` base template that encodes the size of a tensor of order `D` (which is not a linear function)
+[^62]: e.g. there is also a `TENSOR` base template that encodes the size of a tensor of order `D` (which is not a linear function)
+[^63]: Common field definitions are collected in `src/dynamics/descriptorField.h`
 
 Building upon this common field structure allows us to write down a `getIndexFromFieldList` helper function template that automatically calculates the starting offset of any element in an arbitrary list of fields:
 
@@ -285,7 +290,7 @@ constexpr unsigned getIndexFromFieldList()
 }
 ```
 
-As far as template metaprogramming is concerned this code is quite basic -- we simply recursively traverse the variadic field list and sum up the field sizes along the way. This function is wrapped by the `DESCRIPTOR_BASE::index` method template that safely exposes the memory offset of a given field. We are left with a generic interface that replaces our previous inconsistent and hard to maintain field offsets in the vein of `DESCRIPTOR::ExternalField::forceBeginsAt`.
+As far as template metaprogramming is concerned this code is quite basic -- we simply recursively traverse the variadic field list and sum up the field sizes along the way. This function is wrapped by the `DESCRIPTOR_BASE::index` method template that exposes the memory offset of a given field. We are left with a generic interface that replaces our previous inconsistent and hard to maintain field offsets in the vein of `DESCRIPTOR::ExternalField::forceBeginsAt`.
 
 ```cpp
 /// Returns index of WANTED_FIELD
@@ -301,7 +306,7 @@ static constexpr int index(const unsigned localIndex=0)
 }
 ```
 
-As we will see in the section on _improved field access_ this method is not commonly used in user code but rather as a building block for self-documenting field accessors. One might notice that the abstraction layers are starting to pile up -- luckily all of them are by themselves rather plain `constexpr` function templates and can as such be fully collapsed during compile time.
+As we will see in the section on _improved field access_ this method is not commonly used in user code but rather as a building block for self-documenting field accessors. One might notice that the abstraction layers are starting to pile up -- luckily all of them are by themselves rather plain `constexpr` function templates and can as such still be fully collapsed during compile time.
 
 ### Fraction types
 
@@ -342,7 +347,7 @@ public:
 };
 ```
 
-This works out nicely for both integral and automatically differentiable floating point types and even yields a more pleasant syntax for defining fractional descriptor values due to C++'s implicit constructor calls. One remaining hiccup is the representation of values such as square roots that are not easily expressed as readable rational numbers. Such weights are required by some more exotic LB models and currently stored by explicit specialization for any required type. A slightly surprising fact in this context is that the C++ standard doesn't require some functions such as `std::sqrt` to be `constexpr`. This problem remained undetected for quite a while as e.g. GCC fixes this issue in a non-standard extension. So in the long term we are going to have to invest some more effort into adding compile-time math functions in the vein of [GCEM](https://www.kthohr.com/gcem.html).
+This works well for both integral and automatically differentiable floating point types and even yields a more pleasant syntax for defining fractional descriptor values due to C++'s implicit constructor calls. One remaining hiccup is the representation of values such as square roots that are not easily expressed as readable rational numbers. Such weights are required by some more exotic LB models and currently stored by explicit specialization for any required type. A slightly surprising fact in this context is that the C++ standard doesn't require some functions such as `std::sqrt` to be `constexpr`. This problem remained undetected for quite a while as e.g. GCC fixes this issue in a non-standard extension. So in the long term we are going to have to invest some more effort into adding compile-time math functions in the vein of [GCEM](https://www.kthohr.com/gcem.html).
 
 ### Tagging free functions
 
@@ -367,7 +372,9 @@ This powerful concept uses C++'s function overload resolution to transparently c
 
 ### Extracting tags from lists
 
-One might have noticed that we accessed a `DESCRIPTOR::category_tag` typedef to select the correct function overload. While the canonical way to do function tagging is to simply define this type on a case by case basis in any tagged structure, I chose to develop something slightly more sophisticated: Tags are represented as special zero-size fields and passed to the descriptor specialization alongside any other fields. This feels quite nice and results in a very expressive and self-documenting interface for defining new descriptors.
+One might have noticed that we accessed a `DESCRIPTOR::category_tag` typedef to select the correct function overload. While the canonical way to do function tagging is to simply define this type on a case by case basis in any tagged structure, I chose to develop something slightly more sophisticated: Tags are represented as special zero-size fields[^7] and passed to the descriptor specialization alongside any other fields. This feels quite nice and results in a very expressive and self-documenting interface for defining new descriptors.
+
+[^7]: See `src/dynamics/descriptorTag.h`
 
 ```cpp
 /// Base of a descriptor tag
@@ -472,18 +479,22 @@ setField(T value)
 }
 ```
 
+Note that disabling a member function specialization depending on its parent's template arguments is only possible with some indirection: The parent template argument `DESCRIPTOR` is passed as the default value to the member function's `X` argument. This parameter can then be used by `std::enable_if` as one would expect.
+
 ## Two days of merging
 
 It is probably clear that the set of changes summarized so far mark a far reaching revamp of the existing codebase -- in fact there was scarcely a file untouched after I got everything to work again. As we do not live in an ideal world where I could have developed this in isolation while any other developments are stopped, both the initial prototype and the following rollout to all of OpenLB had to be developed on a seperate branch. Due to the additional hindrance that I am not actually working anywhere close to full-time on this[^8] these changes took quite a few months from inception to full realization. Correspondingly the meta descriptor and master branch had diverged significantly by the time we felt ready to merge -- you can imagine how unpleasant it was to fiddle this back together.
 
-[^8]: I am after all still primarily a mathematics student
+[^8]: After all I am still primarily a mathematics student
 
-I found the three-way merge functionality offered by [Meld](https://meldmerge.org/) to be a most useful tool during this endeavour. My fingers were still twitching in a rythmic pattern after two days of using this tool to more or less manually merge everything back together but it was still worlds better than the alternative of e.g. resolving the conflicts in a normal text editor.
+I found the three-way merge functionality offered by [Meld](https://meldmerge.org/) to be a most useful tool during this endeavour. My fingers were still twitching in a rhythmic pattern after two days of using this utility to more or less manually merge everything back together but it was still worlds better than the alternative of e.g. resolving the conflicts in a normal text editor.
 
 Sadly even in retrospect I can not think of a better alternative to letting the branches diverge this far: A significant chunk of all lines had to be changed in randomly non-trivial ways and there was no discrete point in between where you could push these changes to the rest of the team with a good conscience. At least further changes to e.g. the foundational cell data structures should now prove to be significantly easier than they would have been without this refactor.
 
 ## Summary
 
-All in all I am quite satisfied with how this new concept turned out in practice: The code is smaller and more self-documenting while growing in extensibility and consistency. The internally increased complexity is restricted to a set of classes and meta templates that the ordinary user that just wants to write a simulation should never come in contact with. Some listings in this article might look cryptic at first but as far as template metaprogramming goes this is still reasonable -- we did not run into any serious portability issues and everything works as expected in GCC, Clang and Intel's C++ compiler.
+All in all I am quite satisfied with how this new concept turned out in practice: The code is smaller and more self-documenting while growing in extensibility and consistency. The internally increased complexity is restricted to a set of classes and meta templates that the ordinary user that just wants to write a simulation should never come in contact with. Some listings in this article might look cryptic at first but as far as template metaprogramming goes this is still reasonable -- we did not run into any serious portability issues and everything works as expected in GCC, Clang and Intel's C++ compiler[^9].
 
-To conclude things I want to encourage everyone to check out the latest [OpenLB](http://www.openlb.net) release to see these and other interesting new features in practive. Should this article have awoken any interest in CFD using Lattice Boltzmann Methods, a fun introduction is provided by my [previous article](/article/fun_with_compute_shaders_and_fluid_dynamics/) on just this topic.
+[^9]: I was surprised to learn how big of an advantage the Intel compiler can provide: In some settings the generated code runs up to 20 percent faster compared to what GCC or Clang produce.
+
+To conclude things I want to encourage everyone to check out the latest [OpenLB](https://www.openlb.net/news/openlb-release-1-3-available/) release to see these and other interesting new features in practive. Should this article have awoken any interest in CFD using Lattice Boltzmann Methods, a fun introduction is provided by my [previous article](/article/fun_with_compute_shaders_and_fluid_dynamics/) on just this topic.
