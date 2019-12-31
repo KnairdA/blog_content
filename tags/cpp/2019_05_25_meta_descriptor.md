@@ -1,1 +1,0 @@
-../../articles/2019_05_25_meta_descriptor.md
