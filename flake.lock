@@ -6,11 +6,11 @@
         "pkgs-personal": "pkgs-personal"
       },
       "locked": {
-        "lastModified": 1629657671,
-        "narHash": "sha256-cmg2QMzQLAhpQg3n3Illx/Wgr3Sac6VuScStbLgJUA8=",
+        "lastModified": 1632338037,
+        "narHash": "sha256-Uj/6702xXVq0UDrY2v/LtmUQBguNpfuVmNyKisc4+Gg=",
         "ref": "master",
-        "rev": "254b008436f3649e77cd55154c77c949fdf3d3b4",
-        "revCount": 248,
+        "rev": "24373f1e7d2f536efac22caa71de50223aca12d7",
+        "revCount": 249,
         "type": "git",
         "url": "https://code.kummerlaender.eu/blog.kummerlaender.eu"
       },
@@ -71,7 +71,24 @@
     },
     "root": {
       "inputs": {
-        "cms": "cms"
+        "cms": "cms",
+        "stable": "stable"
+      }
+    },
+    "stable": {
+      "locked": {
+        "lastModified": 1632291606,
+        "narHash": "sha256-oEN24XJYAFK9tsD13TzLEizpgQigEfgC6i9x1b/1pVU=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "83413f47809790e4ca012e314e7782adeae36cf2",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-21.05",
+        "repo": "nixpkgs",
+        "type": "github"
       }
     }
   },
