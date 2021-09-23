@@ -6,11 +6,11 @@
         "pkgs-personal": "pkgs-personal"
       },
       "locked": {
-        "lastModified": 1632338037,
-        "narHash": "sha256-Uj/6702xXVq0UDrY2v/LtmUQBguNpfuVmNyKisc4+Gg=",
+        "lastModified": 1632774638,
+        "narHash": "sha256-hz6dPX6dSDKtjsIp90avvas42H0iftou1IVyXb8b4x4=",
         "ref": "master",
-        "rev": "24373f1e7d2f536efac22caa71de50223aca12d7",
-        "revCount": 249,
+        "rev": "45934403433b4359828a4ccbb3f611995a56e811",
+        "revCount": 252,
         "type": "git",
         "url": "https://code.kummerlaender.eu/blog.kummerlaender.eu"
       },
