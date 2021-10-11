@@ -1,0 +1,195 @@
+* Reproducible development environment for Teensy
+So for a change of scenery I recently started to mess around with microcontrollers again.
+Since the last time that I had any real contact with this area was probably around a decade ago --- programming an [[https://www.dlr.de/rm/en/desktopdefault.aspx/tabid-14006/#gallery/34068][ASURO]] robot --- I started basically from scratch.
+Driven by the goal of building and programming a fancy mechanical keyboard (as it seems to be the trendy thing to do) I chose the Arduino-compatible [[https://www.pjrc.com/store/teensy40.html][Teensy 4.0]]
+board. While I appreciate the rich and accessible software ecosystem for this platform, I don't really want to use some special IDE, applying amongst other things[fn:0]
+weird non-standard preprocessing to my code. In this vein it would also be nice to use my accustomed [[https://nixos.org][Nix-based]] toolchain which leads me to this article.
+
+Roughly following what [[https://rzetterberg.github.io/teensy-development-on-nixos.html][others did]] for Teensy 3.1 while adapting it to Teensy 4.0 and Nix flakes it is simple to build and flash
+some basic C++ programs onto a USB-attached board. The adapted version of the Arduino library is available on [[https://github.com/PaulStoffregen/cores][Github]] and can
+be compiled into a shared library using flags
+
+#+BEGIN_SRC make
+MCU     = IMXRT1062
+MCU_DEF = ARDUINO_TEENSY40
+
+OPTIONS  = -DF_CPU=600000000 -DUSB_SERIAL -DLAYOUT_US_ENGLISH
+OPTIONS += -D__$(MCU)__ -DARDUINO=10813 -DTEENSYDUINO=154 -D$(MCU_DEF)
+
+CPU_OPTIONS = -mcpu=cortex-m7 -mfloat-abi=hard -mfpu=fpv5-d16 -mthumb
+
+CPPFLAGS = -Wall -g -O2 $(CPU_OPTIONS) -MMD $(OPTIONS) -ffunction-sections -fdata-sections
+CXXFLAGS = -felide-constructors -fno-exceptions -fpermissive -fno-rtti -Wno-error=narrowing -I@TEENSY_INCLUDE@
+#+END_SRC
+
+included into a run-of-the-mill Makefile and relying on the =arm-none-eabi-gcc= compiler. Correspondingly, the
+derivation for the core library [[http://code.kummerlaender.eu/teensy-env/tree/core.nix?id=44c1837717f748b891df1a6c88a72ec3a51470ce][=core.nix=]] is straight forward. It clones a given version of the library repository,
+jumps to the =teensy4= directory, deletes the example =main.cpp= file to exclude it from the library and applies a Makefile
+adapted from the default one. For the result only headers, common flags and the linker script =IMXRT1062.ld=
+are exported.
+
+As existing Arduino /sketches/ commonly consist of a single C++ file (ignoring some non-standard stuff for later) most
+builds can be handled generically by a mapping of =*.cpp= files into flashable =*.hex= files. This is realized by the following
+function based on the =teensy-core= derivation and a [[http://code.kummerlaender.eu/teensy-env/tree/Makefile.default?id=44c1837717f748b891df1a6c88a72ec3a51470ce][default makefile]]:
+
+#+BEGIN_SRC nix
+build = name: source: pkgs.stdenv.mkDerivation rec {
+  inherit name;
+
+  src = source;
+
+  buildInputs = with pkgs; [
+    gcc-arm-embedded
+    teensy-core
+  ];
+
+  buildPhase = ''
+    export CC=arm-none-eabi-gcc
+    export CXX=arm-none-eabi-g++
+    export OBJCOPY=arm-none-eabi-objcopy
+    export SIZE=arm-none-eabi-size
+
+    cp ${./Makefile.default} Makefile
+    export TEENSY_PATH=${teensy-core}
+    make
+  '';
+
+  installPhase = ''
+    mkdir $out
+    cp *.hex $out/
+  '';
+};
+#+END_SRC
+
+The derivation yielded by =build "test" ./test= results in a =result= directory containing a =*.hex= file for each
+C++ file contained in the =test= directory. Adding a =loader= function to be used in convenient =nix flake run=
+commands
+
+#+BEGIN_SRC nix
+loader = name: path: pkgs.writeScript name ''
+  #!/bin/sh
+  ${pkgs.teensy-loader-cli}/bin/teensy-loader-cli --mcu=TEENSY40 -w ${path}
+'';
+#+END_SRC
+
+a reproducible build of the canonical /blink/ example[fn:1] is realized using:
+
+#+BEGIN_SRC sh
+nix flake clone git+https://code.kummerlaender.eu/teensy-env --dest .
+nix run .#flash-blink
+#+END_SRC
+
+Expanding on this, the =teensy-env= flake also provides convenient =image(With)= functions for building
+programs that depend on additional Arduino libraries such as for controlling servos. E.g. the build
+of a program =test.cpp= placed in a =src= folder
+
+#+BEGIN_SRC cpp
+#include <Arduino.h>
+#include <Servo.h>
+
+extern "C" int main(void) {
+  Servo servo;
+  // Servo connected to PWM-capable pin 1
+  servo.attach(1);
+  while (true) {
+    // Match potentiometer connected to analog pin 7
+    servo.write(map(analogRead(7), 0, 1023, 0, 180));
+    delay(20);
+  }
+}
+#+END_SRC
+
+is fully described by the flake:
+
+#+BEGIN_SRC nix
+{
+  description = "Servo Test";
+
+  inputs = {
+    teensy-env.url = git+https://code.kummerlaender.eu/teensy-env;
+  };
+
+  outputs = { self, teensy-env }: let
+    image = teensy-env.custom.imageWith
+      (with teensy-env.custom.teensy-extras; [ servo ]);
+
+  in {
+    defaultPackage.x86_64-linux = image.build "servotest" ./src;
+  };
+}
+#+END_SRC
+
+At first I expected the build of [[http://www.ulisp.com/][uLisp]][fn:2] to proceed equally smoothly as this implementation of Lisp
+for microcontrollers is provided as a single [[https://raw.githubusercontent.com/technoblogy/ulisp-arm/master/ulisp-arm.ino][=ulisp-arm.ino=]] file. However, the =*.ino= extension
+is not just for show here as beyond even the replacement of =main= by =loop= and =setup= --- which
+would be easy to fix --- it relies on further non-standard preprocessing offered by the
+Arduino toolchain. I quickly aborted my efforts towards patching in e.g. the forward-declarations
+which are automagically added during the build (is it really such a hurdle to at least declare stuff before
+referring to it… oh well) and instead followed a less pure approach using =arduino-cli= to access
+the actual Arduino preprocessor.
+
+#+BEGIN_SRC sh
+arduino-cli core install arduino:samd
+arduino-cli compile --fqbn arduino:samd:arduino_zero_native --preprocess ulisp-arm.ino > ulisp-arm.cpp
+#+END_SRC
+
+The problematic line w.r.t. to reproducible builds in Nix is the installation of the =arduino:samd= toolchain
+which requires network access and wants to install stuff to home. Pulling in arbitrary stuff over the
+network is of course not something one wants to do in an isolated and hopefully reproducible build
+environment which is why this kind of stuff is heavily restricted in common Nix derivations. Luckily
+it is possible to misuse (?) a fixed-output derivation to describe the preprocessing of =ulisp-arm.ino=
+into a standard C++ =ulisp-arm.cpp= compilable using the GCC toolchain.
+
+The relevant file [[https://code.kummerlaender.eu/teensy-env/tree/ulisp.nix?id=44c1837717f748b891df1a6c88a72ec3a51470ce][=ulisp.nix=]] pulls in the uLisp source from Github and calls =arduino-cli= to install
+its toolchain to a temporary home folder followed by preprocessing the source into the derivation's
+output. The relevant lines for turning this into a fixed-output derivation are
+
+#+BEGIN_SRC nix
+outputHashMode = "flat";
+outputHashAlgo = "sha256";
+outputHash = "mutVLBFSpTXgUzu594zZ3akR/Z7e9n5SytU6WoQ6rKA=";
+#+END_SRC
+
+to declare the hash of the resulting file. After this point building and flashing uLisp using the =teensy-env=
+flake works the same as for any C++ program. The two additional /SPI/ and /Wire/ library dependencies are
+added easily using =imageWith=:
+
+#+BEGIN_SRC nix
+teensy-ulisp = let
+  ulisp-source = import ./ulisp.nix { inherit pkgs; };
+  ulisp-deps   = with teensy-extras; [ spi wire ];
+in (imageWith ulisp-deps).build
+  "teensy-ulisp"
+  (pkgs.linkFarmFromDrvs "ulisp" [ ulisp-source ]);
+#+END_SRC
+
+So we are now able to build and flash uLisp onto a conveniently attached Teensy 4.0 board using only:
+
+#+BEGIN_SRC sh
+nix flake clone git+https://code.kummerlaender.eu/teensy-env --dest .
+nix run .#flash-ulisp
+#+END_SRC
+
+Connecting finally via serial terminal =screen /dev/ttyACM0 9600= we end up in a LISP environment where we
+can play around with the microcontroller at our leisure without reflashing.
+
+#+BEGIN_SRC lisp
+59999> (* 21 2)
+42
+
+59999> (defun blink (&optional x)
+         (pinmode 13 t)
+         (digitalwrite 13 x)
+         (delay 1000)
+         (blink (not x)))
+
+59966> (blink)
+#+END_SRC
+
+As always, the code of everything discussed here is available via Git on [[https://code.kummerlaender.eu/teensy-env][code.kummerlaender.eu]].
+While I only focused on Teensy 4.0 it should be easy to adapt to other versions by changing the
+compiler flags using [[https://github.com/PaulStoffregen/cores][PaulStoffregen/cores]] as a reference.
+
+[fn:0] e.g. forcing me to patch my XMonad [[http://code.kummerlaender.eu/nixos_home/tree/gui/conf/xmonad.hs][config]] to even get a usable UI…
+[fn:1] Simply flashing the on-board LED periodically
+[fn:2] Interactive development using a Lisp REPL on a microcontroller, how much more can you really ask for?
