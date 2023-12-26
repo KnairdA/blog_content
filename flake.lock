@@ -8,15 +8,15 @@
       "locked": {
         "lastModified": 1632774638,
         "narHash": "sha256-hz6dPX6dSDKtjsIp90avvas42H0iftou1IVyXb8b4x4=",
-        "ref": "master",
+        "ref": "refs/heads/master",
         "rev": "45934403433b4359828a4ccbb3f611995a56e811",
         "revCount": 252,
         "type": "git",
-        "url": "https://code.kummerlaender.eu/blog.kummerlaender.eu"
+        "url": "ssh://git@code.kummerlaender.eu/blog.kummerlaender.eu"
       },
       "original": {
         "type": "git",
-        "url": "https://code.kummerlaender.eu/blog.kummerlaender.eu"
+        "url": "ssh://git@code.kummerlaender.eu/blog.kummerlaender.eu"
       }
     },
     "nixpkgs": {

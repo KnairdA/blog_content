@@ -3,7 +3,7 @@
 
   inputs = {
     stable.url = github:NixOS/nixpkgs/nixos-21.05;
-    cms.url = git+https://code.kummerlaender.eu/blog.kummerlaender.eu;
+    cms.url = git+ssh://git@code.kummerlaender.eu/blog.kummerlaender.eu;
   };
 
   outputs = { self, stable, cms, ... }: {
