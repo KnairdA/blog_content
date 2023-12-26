@@ -35,7 +35,7 @@ Executed in   31.77 secs    fish           external
 
 Comparing the GPU build to the previous CPU-only compilation time of around 32 seconds -- while nothing to write home about -- it was still clear that time would be best spent on separating out the CUDA side of things, both to mitigate its performance impact and to enabled a /mixed/ compiler environment.
 
-[fn:0] Definetely a double edged sword: On the one side it enables concise DSL-like compositions of physical models while supporting automatic code optimization and efficient execution accross heterogeneous hardware. On the other side my much younger, Pascal-fluent, self would not be happy with how cryptic and unmaintainable many of my listings can look to the outsider.
+[fn:0] Definitely a double edged sword: On the one side it enables concise DSL-like compositions of physical models while supporting automatic code optimization and efficient execution accross heterogeneous hardware. On the other side my much younger, Pascal-fluent, self would not be happy with how cryptic and unmaintainable many of my listings can look to the outsider.
 In any case, OpenLB as a heavily templatized and meta-programmed C++ software library is a foundational design decision.
 [fn:1] Data structures, pre- and post-processing logic, IO routines, ...
 [fn:2] Commonly improving performance by quite a few percent
@@ -60,3 +60,90 @@ This mode consisted of a somewhat rough and leaky separation between interface a
 These C++ files could then be compiled once into a shared library that was linked to the application unit compiled without access to the implementation headers.
 While this worked it was always a struggle to keep these files maintained.
 Additionally any benefit for the, at that time CPU-only, codebase was negligible and in the end not worth the effort any more causing it to be dropped somewhere on the road to release 1.4.
+
+Nevertheless, the basic approach of compiling a shared libary of explicit template instantiations is sound if we can find a way to automatically generate the instantiations per-case instead of manually maintaining them.
+A starting point for this is to take a closer look at the linker errors produced when compiling a simulation case including only the interface headers for the GPU code.
+These errors contain partial signatures of all relevant methods from plain function calls
+
+#+BEGIN_SRC bash
+λ ~/p/c/o/e/l/cavity3dBenchmark (openlb-env-gcc-openmpi-cuda-env) • mpic++ cavity3d.o  -lpthread -lz -ltinyxml -L../../../build/lib -lolbcore
+cavity3d.cpp:(...): undefined reference to `olb::gpu::cuda::device::synchronize()'
+#+END_SRC
+
+to bulk and boundary collision operator constructions
+
+#+BEGIN_SRC bash
+cavity3d.cpp:(...): undefined reference to `olb::ConcreteBlockCollisionO<float, olb::descriptors::D3Q19<>, (olb::Platform)2, olb::dynamics::Tuple<float, olb::descriptors::D3Q19<>, olb::momenta::Tuple<olb::momenta::BulkDensity, olb::momenta::BulkMomentum, olb::momenta::BulkStress, olb::momenta::DefineToNEq>, olb::equilibria::SecondOrder, olb::collision::BGK, olb::dynamics::DefaultCombination> >::ConcreteBlockCollisionO()'
+cavity3d.cpp:(...): undefined reference to `olb::ConcreteBlockCollisionO<float, olb::descriptors::D3Q19<>, (olb::Platform)2, olb::CombinedRLBdynamics<float, olb::descriptors::D3Q19<>, olb::dynamics::Tuple<float, olb::descriptors::D3Q19<>, olb::momenta::Tuple<olb::momenta::BulkDensity, olb::momenta::BulkMomentum, olb::momenta::BulkStress, olb::momenta::DefineToNEq>, olb::equilibria::SecondOrder, olb::collision::BGK, olb::dynamics::DefaultCombination>, olb::momenta::Tuple<olb::momenta::InnerCornerDensity3D<1, -1, 1>, olb::momenta::FixedVelocityMomentumGeneric, olb::momenta::InnerCornerStress3D<1, -1, 1>, olb::momenta::DefineSeparately> > >::ConcreteBlockCollisionO()'
+#+END_SRC
+
+as well as core data structure accessors:
+
+#+BEGIN_SRC bash
+cavity3d.cpp:(.text._ZN3olb20ConcreteBlockLatticeIfNS_11descriptors5D3Q19IJEEELNS_8PlatformE2EE21getPopulationPointersEj[_ZN3olb20ConcreteBlockLatticeIfNS_11descriptors5D3Q19IJEEELNS_8PlatformE2EE21getPopulationPointersEj]+0x37): undefined reference to `olb::gpu::cuda::CyclicColumn<float>::operator[](unsigned long)'
+#+END_SRC
+
+These errors are easily turned into a sorted list of unique missing symbols using basic piping
+
+#+BEGIN_SRC makefile
+build/missing.txt: $(OBJ_FILES)
+    $(CXX) $^ $(LDFLAGS) -lolbcore 2>&1 \
+  | grep -oP ".*undefined reference to \`\K[^']+\)" \
+  | sort \
+  | uniq > $@
+#+END_SRC
+
+which only assumes that the locale is set to english and -- surprisingly -- works consistently accross any relevant C++ compilers[fn:5], likely due to shared or very similar linkers.
+The resulting plain list of C++ method signatures showcases the reasonably structured and consistent template /language/ employed by OpenLB:
+
+#+BEGIN_SRC cpp
+olb::ConcreteBlockCollisionO<float, olb::descriptors::D3Q19<>, (olb::Platform)2, olb::CombinedRLBdynamics<float, olb::descriptors::D3Q19<>, olb::dynamics::Tuple<float, olb::descriptors::D3Q19<>, olb::momenta::Tuple<olb::momenta::BulkDensity, olb::momenta::BulkMomentum, olb::momenta::BulkStress, olb::momenta::DefineToNEq>, olb::equilibria::SecondOrder, olb::collision::BGK, olb::dynamics::DefaultCombination>, olb::momenta::Tuple<olb::momenta::VelocityBoundaryDensity<0, -1>, olb::momenta::FixedVelocityMomentumGeneric, olb::momenta::RegularizedBoundaryStress<0, -1>, olb::momenta::DefineSeparately> > >::ConcreteBlockCollisionO()
+olb::ConcreteBlockCollisionO<float, olb::descriptors::D3Q19<>, (olb::Platform)2, olb::CombinedRLBdynamics<float, olb::descriptors::D3Q19<>, olb::dynamics::Tuple<float, olb::descriptors::D3Q19<>, olb::momenta::Tuple<olb::momenta::BulkDensity, olb::momenta::BulkMomentum, olb::momenta::BulkStress, olb::momenta::DefineToNEq>, olb::equilibria::SecondOrder, olb::collision::BGK, olb::dynamics::DefaultCombination>, olb::momenta::Tuple<olb::momenta::VelocityBoundaryDensity<0, 1>, olb::momenta::FixedVelocityMomentumGeneric, olb::momenta::RegularizedBoundaryStress<0, 1>, olb::momenta::DefineSeparately> > >::ConcreteBlockCollisionO()
+// [...]
+#+END_SRC
+
+For example, local cell models -- /Dynamics/ in OpenLB speak -- are mostly implemented as tuples of momenta, equilibrium functions and collision operators[fn:6].
+All such relevant classes tend to follow a consistent structure in what methods with which arguments and return types they implement.
+We can use this domain knowledge of our codebase to transform the incomplete signatures in our new =missing.txt= into a full list of explicit template instantiations written in valid C++.
+
+#+BEGIN_SRC makefile
+build/olbcuda.cu: build/missing.txt
+# Generate includes of the case source
+# (replaceable by '#include <olb.h>' if no custom operators are implemented in the application)
+	echo -e '$(CPP_FILES:%=\n#include "../%")' > $@
+# Transform missing symbols into explicit template instantiations by:
+# - filtering for a set of known and automatically instantiable methods
+# - excluding destructors
+# - dropping resulting empty lines
+# - adding the explicit instantiation prefix (all supported methods are void, luckily)
+	cat build/missing.txt \
+	| grep '$(subst $() $(),\|,$(EXPLICIT_METHOD_INSTANTIATION))' \
+	| grep -wv '.*\~.*\|FieldTypeRegistry()' \
+	| xargs -0 -n1 | grep . \
+	| sed -e 's/.*/template void &;/' -e 's/void void/void/' >> $@
+# - filtering for a set of known and automatically instantiable classes
+# - dropping method cruft and wrapping into explicit class instantiation
+# - removing duplicates
+	cat build/missing.txt \
+	| grep '.*\($(subst $() $(),\|,$(EXPLICIT_CLASS_INSTANTIATION))\)<' \
+	| sed -e 's/\.*>::.*/>/' -e 's/.*/template class &;/' -e 's/class void/class/' \
+	| sort | uniq >> $@
+#+END_SRC
+
+Note that this is only possible due to full knowledge of and control over the target codebase.
+In case this is not clear already: In no way do I recommend that this approach be followed in a more general context[fn:7].
+It was only the quickest and most maintainable approach to achieving the stated requirements given the particulars of OpenLB.
+
+As soon as the build system dumped the first =olbcuda.cu= file into the =build= directory I thought that all that remained was to compile this into a shared library and link it all together.
+However, the resulting shared library contained not only the explicitly instantiated symbols but also additional stuff that they required.
+This caused quite a few duplicate symbol errors when I tried to link the library and the main executable.
+While linking could still be forced by ignoring these errors, the resulting executable was not running properly.
+This is where I encountered something unfamiliar to me: Linker version scripts.
+
+[fn:5] Which spans various versions of GCC, Clang and Intel C++
+[fn:6] Momenta representing how to compute macroscopic quantities such as density and velocity, equilibrium representing the /undistrubed/ representation of said quantities in terms of population values and the collision operator representing the specific function used to /relax/ the current population towards this equilibrium. For more details on LBM see e.g. my articles on [[/article/fun_with_compute_shaders_and_fluid_dynamics/][Fun with Compute Shaders and Fluid Dynamics]], a [[/article/year_of_lbm/][Year of LBM]]
+or even my just-in-time visualized [[https://literatelb.org][literate implementation]].
+[fn:7] However, implementing such a explicit instantiation generator that works for any C++ project could be an interesting project for… somebody.
+
+** Conclusion
+Surprisingly, this quick and dirty approach turned out to be unexpectedly stable and portable accross systems and compilers.
