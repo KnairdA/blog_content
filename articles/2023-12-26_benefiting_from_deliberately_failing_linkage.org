@@ -1,0 +1,62 @@
+* Benefiting from deliberately failing linkage
+Realizing that I have not written anything here for two /years/ lets just start writing again:
+Compilation times for template-heavy C++ codebases such as the one at [[https://openlb.net][the center of my daily life]] can be a real pain.
+This mostly got worse since I started to really get my hands dirty in its depths during the [[https://www.helmholtz-hirse.de/series/2022_12_01-seminar_9.html][extensive refactoring]] towards SIMD and GPU support[fn:0].
+The current sad high point in compilation times was reached when compiling the first GPU-enabled simulation cases: More than 100 seconds for a single compile on my not too shabby system.
+This article will detail how I significantly reduced this on the build system level while gaining useful features.
+
+#+BEGIN_SRC bash
+λ ~/p/c/o/e/t/nozzle3d (openlb-env-cuda-env) • time make
+make -C ../../.. core
+make[1]: Entering directory '/home/common/projects/contrib/openlb-master'
+make[1]: Nothing to be done for 'core'.
+make[1]: Leaving directory '/home/common/projects/contrib/openlb-master'
+nvcc -pthread --forward-unknown-to-host-compiler -x cu -O3 -std=c++17 --generate-code=arch=compute_75,code=[compute_75,sm_75] --extended-lambda --expt-relaxed-constexpr -rdc=true -DPLATFORM_CPU_SISD -DPLATFORM_GPU_CUDA  -DDEFAULT_FLOATING_POINT_TYPE=float -I../../../src -c -o nozzle3d.o nozzle3d.cpp
+nvcc nozzle3d.o -o nozzle3d -lolbcore -lpthread -lz -ltinyxml -L/run/opengl-driver/lib -lcuda -lcudadevrt -lcudart -L../../../build/lib
+________________________________________________________
+Executed in  112.27 secs    fish           external
+   usr time  109.46 secs  149.00 micros  109.46 secs
+   sys time    2.42 secs   76.00 micros    2.42 secs
+#+END_SRC
+
+Even when considering that this compiles many dozens of individual CUDA kernels for multiple run-time selectable physical models and boundary conditions in addition to the simulation scaffold[fn:1] it still takes too long for comfortably iterating during development.
+Needless to say, things did not improve when I started working on heterogeneous execution and the single executable needed to also contain vectorized versions of all models for execution on CPUs in addition to MPI and OpenMP routines. 
+Even worse, you really want to use Intel's C++ compilers when running CPU-based simulations on Intel-based clusters[fn:2] which plainly is not possible in such a /homogeneous/ compiler setup where everyhing has to pass through =nvcc=.
+
+#+BEGIN_SRC bash
+λ ~/p/c/o/e/t/nozzle3d (openlb-env-gcc-env) • time make
+g++ -O3 -Wall -march=native -mtune=native -std=c++17 -pthread -DPLATFORM_CPU_SISD  -I../../../src -c -o nozzle3d.o nozzle3d.cpp
+g++ nozzle3d.o -o nozzle3d -lolbcore -lpthread   -lz -ltinyxml     -L../../../build/lib
+________________________________________________________
+Executed in   31.77 secs    fish           external
+   usr time   31.21 secs    0.00 micros   31.21 secs
+   sys time    0.55 secs  693.00 micros    0.55 secs
+#+END_SRC
+
+Comparing the GPU build to the previous CPU-only compilation time of around 32 seconds -- while nothing to write home about -- it was still clear that time would be best spent on separating out the CUDA side of things, both to mitigate its performance impact and to enabled a /mixed/ compiler environment.
+
+[fn:0] Definetely a double edged sword: On the one side it enables concise DSL-like compositions of physical models while supporting automatic code optimization and efficient execution accross heterogeneous hardware. On the other side my much younger, Pascal-fluent, self would not be happy with how cryptic and unmaintainable many of my listings can look to the outsider.
+In any case, OpenLB as a heavily templatized and meta-programmed C++ software library is a foundational design decision.
+[fn:1] Data structures, pre- and post-processing logic, IO routines, ...
+[fn:2] Commonly improving performance by quite a few percent
+
+** Requirements
+Firstly, any solution would need to exist within the existing plain Makefile based build system[fn:3] and should not complicate the existing build workflow for our users[fn:4].
+Secondly, it should allow for defining completely different compilers and configuration flags for the CPU- and the GPU-side of the application.
+The intial driving force of speeding up GPU-targeted compilation would then be satisfied as a side effect due to the ability of only recompiling the CPU-side of things as long as no new physical models are introduced. This restriction is useful in the present context as GPU kernels execute the computationally expensive part, i.e. the actual simulation, but generally do not change often during development of new simulation cases after the initial choice of physical model.
+
+[fn:3] Which was a deliberate design decision in order to minimize dependencies considering the minimal build complexity required by OpenLB as a plain CPU-only MPI code. While this could of course be reconsidered in the face of increased target complexity it was not the time to open that bottle. 
+[fn:4] Mostly domain experts from process engineering, physics or mathematics without much experience in software engineering.
+
+** Approach
+Following the requirements, a basic approach is to split the application into two compilation units: One containing only the CPU-implementation consisting of the high level algorithmic structure, pre- and post-processing, communication logic, CPU-targeted simulation kernels and calls to the GPU code.
+The other containing only the GPU code consisting of CUDA kernels and their immediate wrappers called from the CPU-side of things -- i.e. only those parts that truly need to be compiled using NVIDIA's =nvcc=. 
+Given two separated files =cpustuff.cpp= and =gpustuff.cu= it would be easy to compile them using separate configurations and then link them together into a single executable.
+The main implementation problem is how to generate two such separated compilation units that can be cleanly linked together, i.e. without duplicating symbols and similar hurdles.
+
+** Implementation
+In days past the build system actually contained an option for such separated compilation: termed as the /pre-compiled mode/ in OpenLB speak.
+This mode consisted of a somewhat rough and leaky separation between interface and implementation headers that was augmented by many hand-written C++ files containing explicit template instantiations of the aforementioned implementations for certain common arguments.
+These C++ files could then be compiled once into a shared library that was linked to the application unit compiled without access to the implementation headers.
+While this worked it was always a struggle to keep these files maintained.
+Additionally any benefit for the, at that time CPU-only, codebase was negligible and in the end not worth the effort any more causing it to be dropped somewhere on the road to release 1.4.
