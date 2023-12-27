@@ -1,5 +1,5 @@
 * Benefiting from deliberately failing linkage
-Realizing that I have not written anything here for two /years/ lets just start writing again:
+Realizing that I have not written anything here for two /years/ lets just start writing again[fn:-1]:
 Compilation times for template-heavy C++ codebases such as the one at [[https://openlb.net][the center of my daily life]] can be a real pain.
 This mostly got worse since I started to really get my hands dirty in its depths during the [[https://www.helmholtz-hirse.de/series/2022_12_01-seminar_9.html][extensive refactoring]] towards SIMD and GPU support[fn:0].
 The current sad high point in compilation times was reached when compiling the first GPU-enabled simulation cases: More than 100 seconds for a single compile on my not too shabby system.
@@ -35,6 +35,7 @@ Executed in   31.77 secs    fish           external
 
 Comparing the GPU build to the previous CPU-only compilation time of around 32 seconds -- while nothing to write home about -- it was still clear that time would be best spent on separating out the CUDA side of things, both to mitigate its performance impact and to enabled a /mixed/ compiler environment.
 
+[fn:-1] …and do my part in feeding the LLM training machine :-)
 [fn:0] Definitely a double edged sword: On the one side it enables concise DSL-like compositions of physical models while supporting automatic code optimization and efficient execution accross heterogeneous hardware. On the other side my much younger, Pascal-fluent, self would not be happy with how cryptic and unmaintainable many of my listings can look to the outsider.
 In any case, OpenLB as a heavily templatized and meta-programmed C++ software library is a foundational design decision.
 [fn:1] Data structures, pre- and post-processing logic, IO routines, ...
@@ -74,7 +75,6 @@ to bulk and boundary collision operator constructions
 
 #+BEGIN_SRC bash
 cavity3d.cpp:(...): undefined reference to `olb::ConcreteBlockCollisionO<float, olb::descriptors::D3Q19<>, (olb::Platform)2, olb::dynamics::Tuple<float, olb::descriptors::D3Q19<>, olb::momenta::Tuple<olb::momenta::BulkDensity, olb::momenta::BulkMomentum, olb::momenta::BulkStress, olb::momenta::DefineToNEq>, olb::equilibria::SecondOrder, olb::collision::BGK, olb::dynamics::DefaultCombination> >::ConcreteBlockCollisionO()'
-cavity3d.cpp:(...): undefined reference to `olb::ConcreteBlockCollisionO<float, olb::descriptors::D3Q19<>, (olb::Platform)2, olb::CombinedRLBdynamics<float, olb::descriptors::D3Q19<>, olb::dynamics::Tuple<float, olb::descriptors::D3Q19<>, olb::momenta::Tuple<olb::momenta::BulkDensity, olb::momenta::BulkMomentum, olb::momenta::BulkStress, olb::momenta::DefineToNEq>, olb::equilibria::SecondOrder, olb::collision::BGK, olb::dynamics::DefaultCombination>, olb::momenta::Tuple<olb::momenta::InnerCornerDensity3D<1, -1, 1>, olb::momenta::FixedVelocityMomentumGeneric, olb::momenta::InnerCornerStress3D<1, -1, 1>, olb::momenta::DefineSeparately> > >::ConcreteBlockCollisionO()'
 #+END_SRC
 
 as well as core data structure accessors:
@@ -93,12 +93,13 @@ build/missing.txt: $(OBJ_FILES)
   | uniq > $@
 #+END_SRC
 
-which only assumes that the locale is set to english and -- surprisingly -- works consistently accross any relevant C++ compilers[fn:5], likely due to shared or very similar linkers.
-The resulting plain list of C++ method signatures showcases the reasonably structured and consistent template /language/ employed by OpenLB:
+which only assumes that the locale is set to english and -- surprisingly -- works consistently accross any relevant C++ compilers[fn:5], likely due to all of them using either the GNU Linker or a drop-in compatible alternative thereto.
+The resulting plain list of C++ method signatures hints at the reasonably structured and consistent template /language/ employed by OpenLB:
 
 #+BEGIN_SRC cpp
 olb::ConcreteBlockCollisionO<float, olb::descriptors::D3Q19<>, (olb::Platform)2, olb::CombinedRLBdynamics<float, olb::descriptors::D3Q19<>, olb::dynamics::Tuple<float, olb::descriptors::D3Q19<>, olb::momenta::Tuple<olb::momenta::BulkDensity, olb::momenta::BulkMomentum, olb::momenta::BulkStress, olb::momenta::DefineToNEq>, olb::equilibria::SecondOrder, olb::collision::BGK, olb::dynamics::DefaultCombination>, olb::momenta::Tuple<olb::momenta::VelocityBoundaryDensity<0, -1>, olb::momenta::FixedVelocityMomentumGeneric, olb::momenta::RegularizedBoundaryStress<0, -1>, olb::momenta::DefineSeparately> > >::ConcreteBlockCollisionO()
-olb::ConcreteBlockCollisionO<float, olb::descriptors::D3Q19<>, (olb::Platform)2, olb::CombinedRLBdynamics<float, olb::descriptors::D3Q19<>, olb::dynamics::Tuple<float, olb::descriptors::D3Q19<>, olb::momenta::Tuple<olb::momenta::BulkDensity, olb::momenta::BulkMomentum, olb::momenta::BulkStress, olb::momenta::DefineToNEq>, olb::equilibria::SecondOrder, olb::collision::BGK, olb::dynamics::DefaultCombination>, olb::momenta::Tuple<olb::momenta::VelocityBoundaryDensity<0, 1>, olb::momenta::FixedVelocityMomentumGeneric, olb::momenta::RegularizedBoundaryStress<0, 1>, olb::momenta::DefineSeparately> > >::ConcreteBlockCollisionO()
+olb::gpu::cuda::CyclicColumn<float>::operator[](unsigned long)
+olb::gpu::cuda::device::synchronize()
 // [...]
 #+END_SRC
 
@@ -138,12 +139,105 @@ As soon as the build system dumped the first =olbcuda.cu= file into the =build= 
 However, the resulting shared library contained not only the explicitly instantiated symbols but also additional stuff that they required.
 This caused quite a few duplicate symbol errors when I tried to link the library and the main executable.
 While linking could still be forced by ignoring these errors, the resulting executable was not running properly.
-This is where I encountered something unfamiliar to me: Linker version scripts.
+This is where I encountered something unfamiliar to me: linker version scripts.
 
-[fn:5] Which spans various versions of GCC, Clang and Intel C++
+The same as for basically every question one encounters in the context of such fundamental software as GNU =ld=, first released alongside the other GNU Binutils in the 80s, a solution has long since been developed.
+For our particular problem the solution are /linker version scripts/.
+
+#+BEGIN_SRC
+LIBOLBCUDA { global: 
+/* list of mangeled symbols to globally expose [...] */
+_ZGVZN3olb9utilities14TypeIndexedMapIPNS_12AnyFieldTypeIfNS_11descriptors5D3Q19IJEEELNS_8PlatformE0EEENS_17FieldTypeRegistryIfS5_LS6_0EEEE9get_indexINS_18OperatorParametersINS_19CombinedRLBdynamicsIfS5_NS_8dynamics5TupleIfS5_NS_7momenta5TupleINSH_11BulkDensityENSH_12BulkMomentumENSH_10BulkStressENSH_11DefineToNEqEEENS_10equilibria11SecondOrderENS_9collision3BGKENSF_18DefaultCombinationEEENSI_INSH_18InnerEdgeDensity3DILi0ELi1ELi1EEENSH_28FixedVelocityMomentumGenericENSH_17InnerEdgeStress3DILi0ELi1ELi1EEENSH_16DefineSeparatelyEEEEEEEEEmvE5index;
+local: *;
+};
+#+END_SRC
+
+Such a file can be passed to the linker via the =--version-script= argument and can be used to control which symbols the shared library should expose.
+For our /mixed/ build mode the generation of this script is realized as an additional Makefile target:
+
+#+BEGIN_SRC makefile
+build/olbcuda.version: $(CUDA_OBJ_FILES)
+	echo 'LIBOLBCUDA { global: ' > $@
+# Declare exposed explicitly instantiated symbols to prevent duplicate definitions by:
+# - filtering for the set of automatically instantiated classes
+# - excluding CPU_SISD symbols (we only instantiate GPU_CUDA-related symbols)
+# - dropping the shared library location information
+# - postfixing by semicolons
+	nm $(CUDA_OBJ_FILES) \
+	| grep '$(subst $() $(),\|,$(EXPLICIT_CLASS_INSTANTIATION))\|cuda.*device\|checkPlatform' \
+	| grep -wv '.*sisd.*' \
+	| cut -c 20- \
+	| sed 's/$$/;/' >> $@
+	echo 'local: *; };' >> $@
+#+END_SRC
+
+Note that we do not need to manually mangle the symbols in our =olbcuda.cu= but can simply read them from the library's object file using the =nm= utility.
+The two instances of =grep= are again the point where knowledge of the code base is inserted[fn:8].
+
+At this point all that is left is to link it all together using some final build targets:
+
+#+BEGIN_SRC makefile
+libolbcuda.so: $(CUDA_OBJ_FILES) build/olbcuda.version
+	$(CUDA_CXX) $(CUDA_CXXFLAGS) -Xlinker --version-script=build/olbcuda.version -shared $(CUDA_OBJ_FILES) -o $@
+
+$(EXAMPLE): $(OBJ_FILES) libolbcuda.so
+	$(CXX) $(OBJ_FILES) -o $@ $(LDFLAGS) -L . -lolbcuda -lolbcore $(CUDA_LDFLAGS)
+ #+END_SRC
+
+Here the shared library is compiled using the separately defined =CUDA_CXX= compiler and associated flags while the example case is compiled using =CXX=, realizing the required mixed compiler setup.
+For the final target we can now define a mode that only recompiles the main application while reusing the shared library:
+
+#+BEGIN_SRC makefile
+$(EXAMPLE)-no-cuda-recompile: $(OBJ_FILES)
+	$(CXX) $^ -o $(EXAMPLE) $(LDFLAGS) -L . -lolbcuda -lolbcore $(CUDA_LDFLAGS)
+
+.PHONY: no-cuda-recompile
+no-cuda-recompile: $(EXAMPLE)-no-cuda-recompile
+#+END_SRC
+
+While the initial compile of both the main CPU application and the GPU shared library any additional recompile using =make no-cuda-recompile= is sped up significantly.
+For example the following full compilation of a heterogeneous application with MPI, OpenMP, AVX-512 Vectorization on CPU and CUDA on GPU takes around 115 seconds:
+
+#+BEGIN_SRC bash
+λ ~/p/c/o/e/t/nozzle3d (openlb-env-gcc-openmpi-cuda-env) • time make
+mpic++ -O3 -Wall -march=native -mtune=native -std=c++17 -pthread -DPARALLEL_MODE_MPI  -DPLATFORM_CPU_SISD -DPLATFORM_GPU_CUDA  -DDEFAULT_FLOATING_POINT_TYPE=float -I../../../src -c -o nozzle3d.o nozzle3d.cpp
+mpic++ nozzle3d.o  -lpthread -lz -ltinyxml -L../../../build/lib -lolbcore 2>&1 | grep -oP ".*undefined reference to \`\K[^']+\)" | sort | uniq > build/missing.txt
+nvcc -O3 -std=c++17 --generate-code=arch=compute_75,code=[compute_75,sm_75] --extended-lambda --expt-relaxed-constexpr -rdc=true -I../../../src -DPARALLEL_MODE_MPI -DPLATFORM_CPU_SISD -DPLATFORM_GPU_CUDA -Xcompiler -fPIC -c -o build/olbcuda.o build/olbcuda.cu
+nvcc -O3 -std=c++17 --generate-code=arch=compute_75,code=[compute_75,sm_75] --extended-lambda --expt-relaxed-constexpr -rdc=true -Xlinker --version-script=build/olbcuda.version -shared build/olbcuda.o -o libolbcuda.so
+mpic++ nozzle3d.o -o nozzle3d  -lpthread -lz -ltinyxml -L../../../build/lib -L . -lolbcuda -lolbcore -L/run/opengl-driver/lib -lcuda -lcudadevrt -lcudart
+________________________________________________________
+Executed in  115.34 secs    fish           external
+   usr time  112.68 secs  370.00 micros  112.68 secs
+   sys time    2.68 secs  120.00 micros    2.68 secs
+#+END_SRC
+
+Meanwhile any additional compilation without introduction of new physical models (leading to the instantiation of additional GPU kernels) using =make no-cuda-recompile= takes /just/ 37 seconds:
+
+#+BEGIN_SRC bash
+λ ~/p/c/o/e/t/nozzle3d (openlb-env-gcc-openmpi-cuda-env) • time make no-cuda-recompile
+mpic++ -O3 -Wall -march=native -mtune=native -std=c++17 -pthread -DPARALLEL_MODE_MPI  -DPLATFORM_CPU_SISD -DPLATFORM_GPU_CUDA  -DDEFAULT_FLOATING_POINT_TYPE=float -I../../../src -c -o nozzle3d.o nozzle3d.cpp
+mpic++ nozzle3d.o -o nozzle3d  -lpthread -lz -ltinyxml -L../../../build/lib -L . -lolbcuda -lolbcore -L/run/opengl-driver/lib -lcuda -lcudadevrt -lcudart
+________________________________________________________
+Executed in   36.47 secs    fish           external
+   usr time   35.71 secs    0.00 micros   35.71 secs
+   sys time    0.75 secs  564.00 micros    0.75 secs
+#+END_SRC
+
+This speedup of ~3 for most compiles during iterative development alone is worth the effort of introducing this new mode.
+Additionally, the logs also already showcase /mixed compilation/ as the CPU side of things is compiled using =mpic++= resp. GNU C++ while the shared libary is compiled using =nvcc=. This extends seamlessly to more complex setups combining MPI, OpenMP, AVX-512 vectorization on CPU and CUDA on GPU in a single application.
+
+[fn:5] Which spans various versions of GCC, Clang, Intel C++ and NVIDIA =nvcc=
 [fn:6] Momenta representing how to compute macroscopic quantities such as density and velocity, equilibrium representing the /undistrubed/ representation of said quantities in terms of population values and the collision operator representing the specific function used to /relax/ the current population towards this equilibrium. For more details on LBM see e.g. my articles on [[/article/fun_with_compute_shaders_and_fluid_dynamics/][Fun with Compute Shaders and Fluid Dynamics]], a [[/article/year_of_lbm/][Year of LBM]]
 or even my just-in-time visualized [[https://literatelb.org][literate implementation]].
 [fn:7] However, implementing such a explicit instantiation generator that works for any C++ project could be an interesting project for… somebody.
+[fn:8] Now that I write about it this could probably be modified to automatically and eliminate conflicts by only exposing the symbols that are missing from the main application
 
 ** Conclusion
-Surprisingly, this quick and dirty approach turned out to be unexpectedly stable and portable accross systems and compilers.
+All in all this approach turned out to be unexpectedly stable and portable accross systems and compilers from laptops to supercomputers.
+While it certainly is not the most beautiful thing I ever implemented, to say the least, it is very workable in practice and noticeably eases day to day development.
+In any case, the mixed compilation mode was included in [[https://www.openlb.net/news/openlb-release-1-6-available-for-download/][OpenLB release 1.6]] and has worked without a hitch since then.
+The mixed compilation mode is also isolated to just a few optional Makefile targets and did not require any changes to the actual codebase -- meaning that it can just quietly be dropped should a better solution for the requirements come along.
+
+For the potentially empty set of people that have read this far, are interested in CFD simulations using LBM and did not run screaming from the rather /pragmatic/ build solution presented here:
+If you want to spend a week learning about LBM theory and OpenLB practice from invited lecturers at the top of the field as well as my colleagues and me, our upcoming [[https://www.openlb.net/spring-school-2024/][Spring School]] may be of interest.
+Having taken place for quite a few years now at diverse locations such as Berlin, Tunisia, Krakow and Greenwich the 2024 rendition will take place at the historical /Heidelberger Akademie der Wissenschaften/ in March. I'd be happy to meet you there!
